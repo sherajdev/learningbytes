@@ -1,0 +1,47 @@
+---
+/*
+ * /bytes — full archive of every published byte.
+ *
+ * The home page shows the latest 10 in the rich mixed feed; this page is
+ * the complete archive as a compact list grouped by year. Pagination per
+ * PRD §6.2 is deferred until the archive is long enough to need it.
+ */
+
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ByteList from "../../components/ByteList.astro";
+
+const all = (await getCollection("bytes")).sort(
+  (a, b) => b.data.publishedDate.getTime() - a.data.publishedDate.getTime()
+);
+
+// Group by year for readable skimming.
+type YearGroup = { year: number; bytes: typeof all };
+const years: YearGroup[] = [];
+for (const b of all) {
+  const y = b.data.publishedDate.getFullYear();
+  const last = years.at(-1);
+  if (last && last.year === y) last.bytes.push(b);
+  else years.push({ year: y, bytes: [b] });
+}
+---
+
+<BaseLayout title="All bytes" description="Every byte, in one place.">
+  <header class="mb-12">
+    <h1 class="text-3xl font-bold tracking-tight">All bytes</h1>
+    <p class="mt-2 opacity-60">{all.length} {all.length === 1 ? "byte" : "bytes"} so far.</p>
+  </header>
+
+  {years.length === 0 ? (
+    <p class="opacity-60">No bytes published yet.</p>
+  ) : (
+    <div class="space-y-16">
+      {years.map((g) => (
+        <section>
+          <h2 class="mb-6 text-xs uppercase tracking-[0.15em] opacity-50">{g.year}</h2>
+          <ByteList bytes={g.bytes} />
+        </section>
+      ))}
+    </div>
+  )}
+</BaseLayout>

@@ -1,0 +1,41 @@
+{
+  "name": "learning-bytes",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "fetch": "tsx scripts/fetch-notion.ts",
+    "build": "tsx scripts/fetch-notion.ts && astro build && pagefind --site dist",
+    "preview": "astro preview",
+    "astro": "astro",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^5.0.3",
+    "@astrojs/react": "^5.0.3",
+    "@astrojs/sitemap": "^3.7.2",
+    "@fontsource/ia-writer-quattro": "^5.2.5",
+    "@notionhq/client": "^5.17.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "astro": "^6.1.5",
+    "dotenv": "^17.4.1",
+    "gray-matter": "^4.0.3",
+    "notion-to-md": "^3.1.9",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.8",
+    "pagefind": "^1.5.0"
+  },
+  "overrides": {
+    "vite": "^7"
+  }
+}

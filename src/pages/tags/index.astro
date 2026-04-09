@@ -1,0 +1,40 @@
+---
+/*
+ * /tags — index of every tag with byte counts.
+ *
+ * Simple list, sorted by count desc then name asc. Each tag links to
+ * /tags/[tag].
+ */
+
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const all = await getCollection("bytes");
+const counts = new Map<string, number>();
+for (const b of all) {
+  for (const t of b.data.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+}
+const tags = [...counts.entries()].sort(
+  (a, b) => b[1] - a[1] || a[0].localeCompare(b[0])
+);
+---
+
+<BaseLayout title="Tags" description="Browse bytes by tag.">
+  <header class="mb-12">
+    <h1 class="text-3xl font-bold tracking-tight">Tags</h1>
+    <p class="mt-2 opacity-60">{tags.length} {tags.length === 1 ? "tag" : "tags"}.</p>
+  </header>
+
+  {tags.length === 0 ? (
+    <p class="opacity-60">No tags yet.</p>
+  ) : (
+    <ul class="space-y-3">
+      {tags.map(([tag, n]) => (
+        <li>
+          <a href={`/tags/${tag}`}>#{tag}</a>
+          <span class="ml-2 text-sm opacity-50">· {n}</span>
+        </li>
+      ))}
+    </ul>
+  )}
+</BaseLayout>

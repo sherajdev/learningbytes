@@ -1,0 +1,67 @@
+---
+/*
+ * /sources/[id] — detail page for a single source.
+ *
+ * Shows the source's metadata and every Published byte that cites it.
+ * Only pre-rendered for sources that are actually referenced (matching
+ * the /sources index rule).
+ */
+
+import type { CollectionEntry } from "astro:content";
+import type { GetStaticPaths } from "astro";
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ByteList from "../../components/ByteList.astro";
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const bytes = await getCollection("bytes");
+  const sources = await getCollection("sources");
+
+  // Build a reverse index: source id → bytes that cite it.
+  const backlinks = new Map<string, CollectionEntry<"bytes">[]>();
+  for (const b of bytes) {
+    for (const id of b.data.sourceIds) {
+      if (!backlinks.has(id)) backlinks.set(id, []);
+      backlinks.get(id)!.push(b);
+    }
+  }
+
+  // Only emit pages for sources that are cited at least once.
+  return sources
+    .filter((s) => backlinks.has(s.data.id))
+    .map((source) => ({
+      params: { id: source.data.id },
+      props: { source, bytes: backlinks.get(source.data.id)! },
+    }));
+};
+
+interface Props {
+  source: CollectionEntry<"sources">;
+  bytes: CollectionEntry<"bytes">[];
+}
+
+const { source, bytes } = Astro.props as Props;
+const { title, type, url, author } = source.data;
+---
+
+<BaseLayout title={title} description={`Bytes referencing ${title}.`}>
+  <header class="mb-12">
+    <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+      <a href="/sources">Sources</a> · {type}
+    </p>
+    <h1 class="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
+    {author && <p class="mt-2 opacity-70">{author}</p>}
+    {url && (
+      <p class="mt-4 text-sm">
+        <a href={url} target="_blank" rel="noopener noreferrer">Visit source →</a>
+      </p>
+    )}
+  </header>
+
+  <section>
+    <h2 class="mb-6 text-xs uppercase tracking-[0.15em] opacity-50">
+      Referenced in {bytes.length} {bytes.length === 1 ? "byte" : "bytes"}
+    </h2>
+    <ByteList bytes={bytes} />
+  </section>
+</BaseLayout>

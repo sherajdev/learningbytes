@@ -1,0 +1,31 @@
+---
+/*
+ * SourceLink — a single source rendered as a plain inline link.
+ * No chip, no border, no icon. The type is a quiet italic prefix; the title
+ * carries the underline. Used by both NoteLayout (inline list) and PostLayout
+ * (bullet list).
+ */
+import type { CollectionEntry } from "astro:content";
+
+interface Props {
+  source: CollectionEntry<"sources">;
+}
+
+const { source } = Astro.props;
+const { title, type, url, author } = source.data;
+---
+
+<span class="text-sm">
+  <em class="opacity-50">{type.toLowerCase()}</em>
+  {" · "}
+  {
+    url ? (
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        {title}
+      </a>
+    ) : (
+      <span>{title}</span>
+    )
+  }
+  {author && <span class="opacity-60"> — {author}</span>}
+</span>

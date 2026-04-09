@@ -1,0 +1,113 @@
+---
+/*
+ * /search — client-side search powered by Pagefind.
+ *
+ * Pagefind is a post-build static search indexer (see package.json build
+ * script). It writes its runtime into `dist/pagefind/` after `astro build`,
+ * so this page loads `/pagefind/pagefind.js` at runtime in the browser.
+ *
+ * Dev note: during `astro dev`, `/pagefind/` does not exist — the search
+ * UI will show a "build the site to enable search" message. Once you run
+ * `npm run build && npm run preview`, search works against the real index.
+ */
+
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Search" description="Search every byte.">
+  <header class="mb-10">
+    <h1 class="text-3xl font-bold tracking-tight">Search</h1>
+    <p class="mt-2 opacity-60">Search titles, bodies, and tags.</p>
+  </header>
+
+  <div>
+    <input
+      id="search-input"
+      type="search"
+      placeholder="Type to search…"
+      autocomplete="off"
+      class="w-full border-b bg-transparent py-3 text-lg outline-none"
+      style="border-color: color-mix(in oklab, currentColor 20%, transparent)"
+    />
+    <p id="search-status" class="mt-3 text-xs uppercase tracking-[0.15em] opacity-50"></p>
+  </div>
+
+  <ul id="search-results" class="mt-10 space-y-8"></ul>
+
+  <!--
+    Inline Pagefind glue. We:
+      1. Dynamically import /pagefind/pagefind.js (only exists after `npm run build`).
+      2. Debounce input, run pagefind.search(), then fetch each result's .data()
+         to get title/excerpt/url.
+      3. Render as a simple list. No Pagefind UI CSS — we style it ourselves
+         to match the rest of the site.
+  -->
+  <script>
+    type PagefindResult = {
+      id: string;
+      data: () => Promise<{
+        url: string;
+        excerpt: string;
+        meta: { title?: string; format?: string; date?: string };
+      }>;
+    };
+    type Pagefind = {
+      search: (q: string) => Promise<{ results: PagefindResult[] }>;
+    };
+
+    const input = document.getElementById("search-input") as HTMLInputElement;
+    const status = document.getElementById("search-status") as HTMLElement;
+    const list = document.getElementById("search-results") as HTMLUListElement;
+
+    let pagefind: Pagefind | null = null;
+    let debounce: number | undefined;
+
+    async function loadPagefind() {
+      try {
+        // @ts-expect-error — generated at build time, no types
+        pagefind = (await import(/* @vite-ignore */ "/pagefind/pagefind.js")) as Pagefind;
+        status.textContent = "";
+      } catch {
+        status.textContent =
+          "Search index not built. Run `npm run build` to enable search.";
+      }
+    }
+
+    async function runSearch(q: string) {
+      if (!pagefind) return;
+      if (!q.trim()) {
+        list.innerHTML = "";
+        status.textContent = "";
+        return;
+      }
+      const { results } = await pagefind.search(q);
+      status.textContent = `${results.length} result${results.length === 1 ? "" : "s"}`;
+
+      const data = await Promise.all(results.slice(0, 20).map((r) => r.data()));
+      list.innerHTML = data
+        .map((d) => {
+          const title = d.meta.title ?? "(untitled)";
+          const format = d.meta.format ?? "";
+          const date = d.meta.date ?? "";
+          return `
+            <li>
+              <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+                ${format}${date ? " · " + date : ""}
+              </p>
+              <h2 class="mt-1 text-xl font-bold leading-tight">
+                <a href="${d.url}" class="no-underline">${title}</a>
+              </h2>
+              <p class="mt-2 opacity-70" style="line-height:1.55">${d.excerpt}</p>
+            </li>`;
+        })
+        .join("");
+    }
+
+    input.addEventListener("input", () => {
+      window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => runSearch(input.value), 120);
+    });
+
+    loadPagefind();
+  </script>
+</BaseLayout>

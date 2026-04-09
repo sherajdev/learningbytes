@@ -1,0 +1,52 @@
+---
+/*
+ * /tags/[tag] — all bytes that carry a given tag.
+ *
+ * `getStaticPaths` enumerates every unique tag across the Bytes collection
+ * and pre-renders one page per tag. The `bytes` prop is the subset of the
+ * collection filtered to that tag — passed through so we don't re-filter
+ * at render time.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import type { GetStaticPaths } from "astro";
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ByteList from "../../components/ByteList.astro";
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const all = await getCollection("bytes");
+  const byTag = new Map<string, CollectionEntry<"bytes">[]>();
+  for (const b of all) {
+    for (const t of b.data.tags) {
+      if (!byTag.has(t)) byTag.set(t, []);
+      byTag.get(t)!.push(b);
+    }
+  }
+  return [...byTag.entries()].map(([tag, bytes]) => ({
+    params: { tag },
+    props: { bytes },
+  }));
+};
+
+interface Props {
+  bytes: CollectionEntry<"bytes">[];
+}
+
+const { tag } = Astro.params;
+const { bytes } = Astro.props as Props;
+---
+
+<BaseLayout title={`#${tag}`} description={`Bytes tagged #${tag}.`}>
+  <header class="mb-12">
+    <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+      <a href="/tags">Tags</a>
+    </p>
+    <h1 class="mt-2 text-3xl font-bold tracking-tight">#{tag}</h1>
+    <p class="mt-2 opacity-60">
+      {bytes.length} {bytes.length === 1 ? "byte" : "bytes"}
+    </p>
+  </header>
+
+  <ByteList bytes={bytes} />
+</BaseLayout>

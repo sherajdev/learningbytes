@@ -1,0 +1,188 @@
+---
+/*
+ * PostLayout — full layout for long-form bytes (Format: Post).
+ *
+ * Per design research: a Post is differentiated from a Note by the presence
+ * of an h1 title (and a dek/excerpt below it). Same typeface, same accent,
+ * same restraint everywhere else — the title alone is doing the work.
+ *
+ * Body uses .byte-body (no --note modifier) for the wider, looser measure.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import { getEntry } from "astro:content";
+import BaseLayout from "./BaseLayout.astro";
+import SourceLink from "../components/SourceLink.astro";
+
+interface Props {
+  byte: CollectionEntry<"bytes">;
+  /** The byte published just before this one (older). */
+  older?: CollectionEntry<"bytes"> | null;
+  /** The byte published just after this one (newer). */
+  newer?: CollectionEntry<"bytes"> | null;
+}
+
+const { byte, older = null, newer = null } = Astro.props;
+const {
+  title,
+  publishedDate,
+  updatedDate,
+  tags,
+  excerpt,
+  series,
+  seriesOrder,
+  sourceIds,
+  readingTime,
+} = byte.data;
+
+const sources = (
+  await Promise.all(sourceIds.map((id) => getEntry("sources", id)))
+).filter((s): s is CollectionEntry<"sources"> => s !== undefined);
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+// Build share URLs at render time. The canonical URL has to come from
+// Astro.url + Astro.site so it works in dev (localhost) AND prod.
+const canonicalUrl = new URL(
+  `/bytes/${byte.data.slug}`,
+  Astro.site ?? Astro.url
+).toString();
+const shareText = encodeURIComponent(byte.data.title);
+const shareUrl = encodeURIComponent(canonicalUrl);
+const xUrl = `https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`;
+const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`;
+---
+
+<BaseLayout title={title} description={excerpt}>
+  {
+    series && (
+      <p class="mb-4 text-xs uppercase tracking-[0.15em] opacity-50">
+        Series ·{" "}
+        <a href={`/series/${series}`}>
+          {series}
+          {seriesOrder !== undefined && ` · part ${seriesOrder}`}
+        </a>
+      </p>
+    )
+  }
+
+  <article
+    data-pagefind-body
+    data-pagefind-meta={`title:${title},format:Post,date:${publishedDate.toISOString().slice(0, 10)}`}
+  >
+    <header class="mb-10">
+      <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+        Post · <time datetime={publishedDate.toISOString()}>{fmt(publishedDate)}</time>
+        {readingTime && <> · {readingTime} min</>}
+        {updatedDate && <> · updated {fmt(updatedDate)}</>}
+      </p>
+
+      <h1 class="mt-4 text-3xl font-bold leading-tight tracking-tight">
+        {title}
+      </h1>
+
+      {
+        excerpt && (
+          <p class="mt-4 text-lg opacity-70" style="line-height:1.5">
+            {excerpt}
+          </p>
+        )
+      }
+    </header>
+
+    <div class="byte-body">
+      <slot />
+    </div>
+
+    {
+      sources.length > 0 && (
+        <footer class="mt-16 border-t pt-8 text-sm opacity-80" style="border-color: color-mix(in oklab, currentColor 12%, transparent)">
+          <p class="mb-3 text-xs uppercase tracking-[0.15em] opacity-50">Sources</p>
+          <ul class="space-y-2">
+            {sources.map((s) => (
+              <li>
+                <SourceLink source={s} />
+              </li>
+            ))}
+          </ul>
+        </footer>
+      )
+    }
+
+    {
+      tags.length > 0 && (
+        <p class="mt-8 text-sm opacity-60">
+          {tags.map((tag, i) => (
+            <>
+              {i > 0 && " "}
+              <a href={`/tags/${tag}`}>#{tag}</a>
+            </>
+          ))}
+        </p>
+      )
+    }
+
+    <p class="mt-8 text-sm opacity-50">
+      <span class="opacity-70">share · </span>
+      <a href={xUrl} target="_blank" rel="noopener noreferrer">x</a>
+      <span class="opacity-30"> · </span>
+      <a href={linkedInUrl} target="_blank" rel="noopener noreferrer">linkedin</a>
+      <span class="opacity-30"> · </span>
+      <button
+        type="button"
+        class="copy-link-btn cursor-pointer"
+        data-url={canonicalUrl}
+      >
+        copy link
+      </button>
+    </p>
+
+    <!--
+      Inline copy-link script. The button stores the canonical URL in a
+      data attribute; on click we write to the clipboard and flash a
+      "copied" label for 1.5s. No React island needed for something this
+      small.
+    -->
+    <script is:inline>
+      document.querySelectorAll(".copy-link-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const url = btn.getAttribute("data-url");
+          if (!url) return;
+          try {
+            await navigator.clipboard.writeText(url);
+            const original = btn.textContent;
+            btn.textContent = "copied";
+            setTimeout(() => {
+              btn.textContent = original;
+            }, 1500);
+          } catch (e) {
+            console.error("Copy failed:", e);
+          }
+        });
+      });
+    </script>
+
+    {(older || newer) && (
+      <nav
+        class="mt-16 flex items-center justify-between gap-4 border-t pt-8 text-sm opacity-70"
+        style="border-color: color-mix(in oklab, currentColor 12%, transparent)"
+      >
+        <div class="min-w-0 flex-1">
+          {older && (
+            <a href={`/bytes/${older.data.slug}`} class="block truncate no-underline hover:opacity-100">
+              <span class="opacity-50">←&nbsp;</span>{older.data.title}
+            </a>
+          )}
+        </div>
+        <div class="min-w-0 flex-1 text-right">
+          {newer && (
+            <a href={`/bytes/${newer.data.slug}`} class="block truncate no-underline hover:opacity-100">
+              {newer.data.title}<span class="opacity-50">&nbsp;→</span>
+            </a>
+          )}
+        </div>
+      </nav>
+    )}
+  </article>
+</BaseLayout>

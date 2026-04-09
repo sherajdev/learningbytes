@@ -1,0 +1,55 @@
+---
+/*
+ * /series/[series] — ordered list of bytes in a series.
+ *
+ * Unlike tag pages, order here is *not* reverse-chron — it follows the
+ * `seriesOrder` frontmatter so part 1 always appears above part 2.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import type { GetStaticPaths } from "astro";
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ByteList from "../../components/ByteList.astro";
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const all = await getCollection("bytes");
+  const groups = new Map<string, CollectionEntry<"bytes">[]>();
+  for (const b of all) {
+    if (!b.data.series) continue;
+    if (!groups.has(b.data.series)) groups.set(b.data.series, []);
+    groups.get(b.data.series)!.push(b);
+  }
+
+  return [...groups.entries()].map(([name, bytes]) => {
+    // Sort by seriesOrder (asc). Entries without an order sink to the end.
+    const ordered = [...bytes].sort((a, b) => {
+      const ao = a.data.seriesOrder ?? Number.POSITIVE_INFINITY;
+      const bo = b.data.seriesOrder ?? Number.POSITIVE_INFINITY;
+      return ao - bo;
+    });
+    return { params: { series: name }, props: { bytes: ordered } };
+  });
+};
+
+interface Props {
+  bytes: CollectionEntry<"bytes">[];
+}
+
+const { series } = Astro.params;
+const { bytes } = Astro.props as Props;
+---
+
+<BaseLayout title={series!} description={`Bytes in the "${series}" series.`}>
+  <header class="mb-12">
+    <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+      <a href="/series">Series</a>
+    </p>
+    <h1 class="mt-2 text-3xl font-bold tracking-tight">{series}</h1>
+    <p class="mt-2 opacity-60">
+      {bytes.length} {bytes.length === 1 ? "part" : "parts"}
+    </p>
+  </header>
+
+  <ByteList bytes={bytes} preserveOrder />
+</BaseLayout>

@@ -1,0 +1,121 @@
+---
+/*
+ * BaseLayout — quiet HTML shell. Header is one line, footer is one line,
+ * everything else lives in the slot. Per design research: no borders that
+ * fight content, no shadows, no nav badges. Restraint is the visual system.
+ */
+
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+}
+
+const { title, description, ogImage } = Astro.props;
+const fullTitle = title === "Learning Bytes" ? title : `${title} — Learning Bytes`;
+const canonicalURL = new URL(
+  Astro.url.pathname,
+  Astro.site ?? "https://learningbytes.sheraj.org"
+);
+
+// Cloudflare Web Analytics: PUBLIC_ prefix makes the var available in
+// client-rendered markup at build time. If unset (e.g. local dev), the
+// beacon is skipped entirely — no 404s, no console noise.
+const cfAnalyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{fullTitle}</title>
+    {description && <meta name="description" content={description} />}
+
+    <link rel="canonical" href={canonicalURL} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <meta property="og:title" content={fullTitle} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content={canonicalURL} />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    {description && <meta name="twitter:description" content={description} />}
+
+    <!-- Theme bootstrap (no FOUC) -->
+    <script is:inline>
+      (function () {
+        const stored = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if ((stored ?? (prefersDark ? "dark" : "light")) === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="mx-auto max-w-2xl px-6">
+      <header class="flex items-baseline justify-between pt-12 pb-10">
+        <a
+          href="/"
+          class="text-4xl font-bold tracking-tight no-underline"
+        >
+          Learning Bytes
+        </a>
+        <nav class="flex items-center gap-5 text-sm">
+          <a href="/search" class="opacity-60 hover:opacity-100 no-underline">search</a>
+          <a href="/about" class="opacity-60 hover:opacity-100 no-underline">about</a>
+          <button
+            id="theme-toggle"
+            type="button"
+            class="cursor-pointer opacity-60 hover:opacity-100"
+            aria-label="Toggle light and dark mode"
+          >
+            <span class="theme-label-light">light</span>
+            <span class="theme-label-dark">dark</span>
+          </button>
+        </nav>
+      </header>
+
+      <!--
+        Theme toggle: tiny inline script, no React island. Toggling the
+        `.dark` class on <html> is enough — global.css does the rest, and
+        the bootstrap script in <head> reads the persisted choice on next
+        page load so there's no FOUC.
+      -->
+      <script is:inline>
+        document.getElementById("theme-toggle")?.addEventListener("click", () => {
+          const isDark = document.documentElement.classList.toggle("dark");
+          localStorage.setItem("theme", isDark ? "dark" : "light");
+        });
+      </script>
+
+      <main>
+        <slot />
+      </main>
+
+      <footer class="mt-32 mb-12 text-sm opacity-50">
+        <p>
+          <a href="/rss.xml">rss</a>
+        </p>
+      </footer>
+    </div>
+
+    {/* Cloudflare Web Analytics beacon — cookieless, no PII. Only emitted
+        when a token is configured, so dev builds stay quiet. */}
+    {cfAnalyticsToken && (
+      <script
+        is:inline
+        defer
+        src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon={`{"token": "${cfAnalyticsToken}"}`}
+      />
+    )}
+  </body>
+</html>

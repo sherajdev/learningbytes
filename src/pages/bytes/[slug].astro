@@ -1,0 +1,60 @@
+---
+/*
+ * /bytes/[slug] — the byte detail route.
+ *
+ * One static page per published byte. Layout dispatches on the `format` field
+ * (Note → NoteLayout, Post → PostLayout). Computes older/newer neighbors at
+ * build time so each layout can render its prev/next nav.
+ *
+ * Astro's getStaticPaths runs at build time. Returning a list of `params` +
+ * `props` pre-renders one HTML file per entry into `dist/`. Astro then matches
+ * incoming URLs against the file path. Since this file is `[slug].astro`, the
+ * param key MUST be `slug`.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import type { GetStaticPaths } from "astro";
+import { getCollection, render } from "astro:content";
+import NoteLayout from "../../layouts/NoteLayout.astro";
+import PostLayout from "../../layouts/PostLayout.astro";
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  // Sort newest → oldest. Index 0 is the newest byte; the last entry is the
+  // oldest. From any position i:
+  //   - older neighbor = bytes[i + 1]   (one step toward the past)
+  //   - newer neighbor = bytes[i - 1]   (one step toward the present)
+  const bytes = (await getCollection("bytes")).sort(
+    (a, b) => b.data.publishedDate.getTime() - a.data.publishedDate.getTime()
+  );
+
+  return bytes.map((byte, i) => ({
+    params: { slug: byte.data.slug },
+    props: {
+      byte,
+      older: bytes[i + 1] ?? null,
+      newer: bytes[i - 1] ?? null,
+    },
+  }));
+};
+
+interface Props {
+  byte: CollectionEntry<"bytes">;
+  older: CollectionEntry<"bytes"> | null;
+  newer: CollectionEntry<"bytes"> | null;
+}
+
+const { byte, older, newer } = Astro.props as Props;
+const { Content } = await render(byte);
+---
+
+{
+  byte.data.format === "Note" ? (
+    <NoteLayout byte={byte} older={older} newer={newer}>
+      <Content />
+    </NoteLayout>
+  ) : (
+    <PostLayout byte={byte} older={older} newer={newer}>
+      <Content />
+    </PostLayout>
+  )
+}

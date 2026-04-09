@@ -1,0 +1,67 @@
+---
+/*
+ * /sources — every source referenced by at least one Published byte,
+ * grouped by Type (Article, Video, Book, …).
+ *
+ * Per PRD §6.6: a source only appears on the site if some byte cites it.
+ * That's enforced here by intersecting the sources collection with the
+ * set of IDs pulled from byte.data.sourceIds.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const bytes = await getCollection("bytes");
+const referencedIds = new Set<string>();
+for (const b of bytes) for (const id of b.data.sourceIds) referencedIds.add(id);
+
+const allSources = await getCollection("sources");
+const sources = allSources.filter((s) => referencedIds.has(s.data.id));
+
+// Group by type. Keep a deterministic type order.
+const typeOrder = ["Article", "Video", "Book", "Podcast", "Course", "Conversation", "Other"] as const;
+const byType = new Map<string, CollectionEntry<"sources">[]>();
+for (const s of sources) {
+  const t = s.data.type;
+  if (!byType.has(t)) byType.set(t, []);
+  byType.get(t)!.push(s);
+}
+const groups = typeOrder
+  .filter((t) => byType.has(t))
+  .map((t) => ({
+    type: t,
+    items: byType.get(t)!.sort((a, b) => a.data.title.localeCompare(b.data.title)),
+  }));
+---
+
+<BaseLayout title="Sources" description="Everything that's informed a byte.">
+  <header class="mb-12">
+    <h1 class="text-3xl font-bold tracking-tight">Sources</h1>
+    <p class="mt-2 opacity-60">
+      {sources.length} {sources.length === 1 ? "source" : "sources"} referenced across all bytes.
+    </p>
+  </header>
+
+  {groups.length === 0 ? (
+    <p class="opacity-60">No sources referenced yet.</p>
+  ) : (
+    <div class="space-y-12">
+      {groups.map((g) => (
+        <section>
+          <h2 class="mb-4 text-xs uppercase tracking-[0.15em] opacity-50">{g.type}</h2>
+          <ul class="space-y-3">
+            {g.items.map((s) => (
+              <li>
+                <a href={`/sources/${s.data.id}`}>{s.data.title}</a>
+                {s.data.author && (
+                  <span class="opacity-60"> — {s.data.author}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )}
+</BaseLayout>

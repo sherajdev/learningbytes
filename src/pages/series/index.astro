@@ -1,0 +1,42 @@
+---
+/*
+ * /series — index of every series with byte counts.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const all = await getCollection("bytes");
+const groups = new Map<string, CollectionEntry<"bytes">[]>();
+for (const b of all) {
+  if (!b.data.series) continue;
+  if (!groups.has(b.data.series)) groups.set(b.data.series, []);
+  groups.get(b.data.series)!.push(b);
+}
+const seriesList = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+---
+
+<BaseLayout title="Series" description="Browse bytes by series.">
+  <header class="mb-12">
+    <h1 class="text-3xl font-bold tracking-tight">Series</h1>
+    <p class="mt-2 opacity-60">
+      {seriesList.length} {seriesList.length === 1 ? "series" : "series"}.
+    </p>
+  </header>
+
+  {seriesList.length === 0 ? (
+    <p class="opacity-60">No series yet.</p>
+  ) : (
+    <ul class="space-y-3">
+      {seriesList.map(([name, bytes]) => (
+        <li>
+          <a href={`/series/${name}`}>{name}</a>
+          <span class="ml-2 text-sm opacity-50">
+            · {bytes.length} {bytes.length === 1 ? "byte" : "bytes"}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )}
+</BaseLayout>

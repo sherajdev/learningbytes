@@ -1,0 +1,201 @@
+---
+/*
+ * Home page — the river.
+ *
+ * Per design research: a single reverse-chronological feed of Notes and Posts
+ * mixed together, with sticky month subheaders. Notes render INLINE with
+ * their full body (no click-through needed for the gist). Posts render as a
+ * preview entry with title + dek + "Read more →".
+ *
+ * Astro notes for you (since this is one of the more dense files):
+ *   - `getCollection("bytes")` returns the typed entries from `src/content/bytes/`
+ *   - `render(entry)` returns `{ Content }` — a component that renders the
+ *     parsed markdown body. We pre-render notes here at build time so the
+ *     home page is fully static.
+ *   - The `<Fragment>` (or just `<>`) is needed when mapping inside JSX to
+ *     return multiple sibling elements without a wrapping div.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import { getCollection, getEntry, render } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import SourceLink from "../components/SourceLink.astro";
+
+// ─── Load and sort all bytes ─────────────────────────────────────────────
+const allBytes = (await getCollection("bytes")).sort(
+  (a, b) => b.data.publishedDate.getTime() - a.data.publishedDate.getTime()
+);
+
+// PRD §6.1: home shows the latest 10 items.
+const feed = allBytes.slice(0, 10);
+
+// ─── Resolve sources + pre-render note bodies in parallel ────────────────
+type Enriched = {
+  byte: CollectionEntry<"bytes">;
+  sources: CollectionEntry<"sources">[];
+  // Notes render inline → we keep the rendered Content component handy.
+  // Posts only show a preview → no Content needed.
+  Content: Awaited<ReturnType<typeof render>>["Content"] | null;
+};
+
+const enriched: Enriched[] = await Promise.all(
+  feed.map(async (byte): Promise<Enriched> => {
+    const sources = (
+      await Promise.all(byte.data.sourceIds.map((id) => getEntry("sources", id)))
+    ).filter((s): s is CollectionEntry<"sources"> => s !== undefined);
+
+    if (byte.data.format === "Note") {
+      const { Content } = await render(byte);
+      return { byte, sources, Content };
+    }
+    return { byte, sources, Content: null };
+  })
+);
+
+// ─── Group by month for sticky subheaders ────────────────────────────────
+type MonthGroup = { label: string; entries: Enriched[] };
+const monthGroups: MonthGroup[] = [];
+for (const item of enriched) {
+  const label = item.byte.data.publishedDate.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+  const last = monthGroups.at(-1);
+  if (last && last.label === label) {
+    last.entries.push(item);
+  } else {
+    monthGroups.push({ label, entries: [item] });
+  }
+}
+
+// ─── "Browse by series" section data ─────────────────────────────────────
+const seriesCounts = new Map<string, number>();
+for (const byte of allBytes) {
+  if (byte.data.series) {
+    seriesCounts.set(byte.data.series, (seriesCounts.get(byte.data.series) ?? 0) + 1);
+  }
+}
+const seriesList = [...seriesCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+// ─── Date formatter ──────────────────────────────────────────────────────
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+---
+
+<BaseLayout
+  title="Learning Bytes"
+  description="A running journal of what I'm learning, building, and reading."
+>
+  <!-- Tagline — home only. Edit freely. -->
+  <p class="mb-20 text-base opacity-60" style="line-height:1.5">
+    A running journal of what I'm learning, building, and reading.
+  </p>
+
+  {feed.length === 0 ? (
+    <p class="opacity-60">No bytes published yet.</p>
+  ) : (
+    <div class="space-y-20">
+      {monthGroups.map((group) => (
+        <section>
+          <h2
+            class="month-header sticky top-0 z-10 -mx-6 px-6 py-3 mb-8 text-xs uppercase tracking-[0.15em] opacity-60"
+          >
+            {group.label}
+          </h2>
+
+          <div class="space-y-16">
+            {group.entries.map(({ byte, sources, Content }) =>
+              byte.data.format === "Note" ? (
+                <article id={byte.data.slug}>
+                  <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+                    Note ·{" "}
+                    <a
+                      href={`/bytes/${byte.data.slug}`}
+                      class="note-permalink"
+                    >
+                      <time datetime={byte.data.publishedDate.toISOString()}>
+                        {fmtDate(byte.data.publishedDate)}
+                      </time>
+                    </a>
+                  </p>
+                  <div class="byte-body byte-body--note mt-4">
+                    {Content && <Content />}
+                  </div>
+                  {(sources.length > 0 || byte.data.tags.length > 0) && (
+                    <div class="mt-4 space-y-2 text-sm opacity-70">
+                      {sources.length > 0 && (
+                        <p>
+                          <span class="opacity-50">inspired by · </span>
+                          {sources.map((s, i) => (
+                            <>
+                              {i > 0 && <span class="opacity-30"> · </span>}
+                              <SourceLink source={s} />
+                            </>
+                          ))}
+                        </p>
+                      )}
+                      {byte.data.tags.length > 0 && (
+                        <p class="opacity-60">
+                          {byte.data.tags.map((tag, i) => (
+                            <>
+                              {i > 0 && " "}
+                              <a href={`/tags/${tag}`}>#{tag}</a>
+                            </>
+                          ))}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </article>
+              ) : (
+                <article id={byte.data.slug}>
+                  <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+                    Post ·{" "}
+                    <time datetime={byte.data.publishedDate.toISOString()}>
+                      {fmtDate(byte.data.publishedDate)}
+                    </time>
+                    {byte.data.readingTime && <> · {byte.data.readingTime} min</>}
+                  </p>
+                  <h3 class="mt-2 text-2xl font-bold leading-tight tracking-tight">
+                    <a href={`/bytes/${byte.data.slug}`} class="no-underline">
+                      {byte.data.title}
+                    </a>
+                  </h3>
+                  {byte.data.excerpt && (
+                    <p class="mt-3 opacity-70" style="line-height:1.55">
+                      {byte.data.excerpt}
+                    </p>
+                  )}
+                  <p class="mt-4 text-sm">
+                    <a href={`/bytes/${byte.data.slug}`}>Read more →</a>
+                  </p>
+                </article>
+              )
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  )}
+
+  {seriesList.length > 0 && (
+    <section
+      class="mt-32 pt-8"
+      style="border-top: 1px solid color-mix(in oklab, currentColor 12%, transparent)"
+    >
+      <h2 class="mb-4 text-xs uppercase tracking-[0.15em] opacity-50">
+        Browse by series
+      </h2>
+      <ul class="space-y-2">
+        {seriesList.map(([name, count]) => (
+          <li>
+            <a href={`/series/${name}`}>{name}</a>
+            <span class="ml-2 text-sm opacity-50">
+              · {count} {count === 1 ? "byte" : "bytes"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+</BaseLayout>

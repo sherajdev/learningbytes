@@ -1,0 +1,104 @@
+---
+/*
+ * NoteLayout — minimal layout for short-form bytes (Format: Note).
+ *
+ * Per design research: Notes have NO h1 title on the detail page. The tiny
+ * uppercase meta line ("NOTE · APR 9, 2026") + the body itself is the whole
+ * thing. The presence/absence of a leading title is the primary visual
+ * differentiator vs Posts.
+ *
+ * The page <title> still contains the byte title (set in BaseLayout) so
+ * sharing, bookmarks, and SEO are unaffected.
+ */
+
+import type { CollectionEntry } from "astro:content";
+import { getEntry } from "astro:content";
+import BaseLayout from "./BaseLayout.astro";
+import SourceLink from "../components/SourceLink.astro";
+
+interface Props {
+  byte: CollectionEntry<"bytes">;
+  /** The byte published just before this one (older). */
+  older?: CollectionEntry<"bytes"> | null;
+  /** The byte published just after this one (newer). */
+  newer?: CollectionEntry<"bytes"> | null;
+}
+
+const { byte, older = null, newer = null } = Astro.props;
+const { title, publishedDate, tags, excerpt, sourceIds } = byte.data;
+
+// Resolve source relations against the cached `sources` collection.
+const sources = (
+  await Promise.all(sourceIds.map((id) => getEntry("sources", id)))
+).filter((s): s is CollectionEntry<"sources"> => s !== undefined);
+
+const formattedDate = publishedDate.toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+---
+
+<BaseLayout title={title} description={excerpt}>
+  <article
+    data-pagefind-body
+    data-pagefind-meta={`title:${title},format:Note,date:${publishedDate.toISOString().slice(0, 10)}`}
+  >
+    <p class="text-xs uppercase tracking-[0.15em] opacity-50">
+      Note · <time datetime={publishedDate.toISOString()}>{formattedDate}</time>
+    </p>
+
+    <div class="byte-body byte-body--note mt-6">
+      <slot />
+    </div>
+
+    {(older || newer) && (
+      <nav
+        class="mt-12 flex items-center justify-between gap-4 text-sm opacity-70"
+      >
+        <div class="min-w-0 flex-1">
+          {older && (
+            <a href={`/bytes/${older.data.slug}`} class="block truncate no-underline hover:opacity-100">
+              <span class="opacity-50">←&nbsp;</span>{older.data.title}
+            </a>
+          )}
+        </div>
+        <div class="min-w-0 flex-1 text-right">
+          {newer && (
+            <a href={`/bytes/${newer.data.slug}`} class="block truncate no-underline hover:opacity-100">
+              {newer.data.title}<span class="opacity-50">&nbsp;→</span>
+            </a>
+          )}
+        </div>
+      </nav>
+    )}
+
+    {
+      (sources.length > 0 || tags.length > 0) && (
+        <footer class="mt-12 space-y-3 text-sm opacity-70">
+          {sources.length > 0 && (
+            <p>
+              <span class="opacity-50">inspired by · </span>
+              {sources.map((s, i) => (
+                <>
+                  {i > 0 && <span class="opacity-30"> · </span>}
+                  <SourceLink source={s} />
+                </>
+              ))}
+            </p>
+          )}
+          {tags.length > 0 && (
+            <p class="opacity-60">
+              {tags.map((tag, i) => (
+                <>
+                  {i > 0 && " "}
+                  <a href={`/tags/${tag}`}>#{tag}</a>
+                </>
+              ))}
+            </p>
+          )}
+        </footer>
+      )
+    }
+  </article>
+</BaseLayout>

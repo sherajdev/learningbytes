@@ -1,0 +1,27 @@
+# build output
+dist/
+.astro/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# environment
+.env
+.env.production
+.env.local
+
+# editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# generated content (rebuilt from Notion on every build — see PRD §7)
+src/content/bytes/
+src/content/sources/
+src/assets/notion/

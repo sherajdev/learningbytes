@@ -1,0 +1,223 @@
+/*
+ * Learning Bytes — global styles
+ *
+ * Design thesis (from research): brutal restraint. One typeface (iA Writer
+ * Quattro), one accent color, generous space, thin rules. No card components,
+ * no shadow, no badge pills. Notes vs Posts differentiated only by:
+ *   1. Presence/absence of an h1 title (Notes have none)
+ *   2. A tiny uppercase meta line ("NOTE · DATE" vs "POST · DATE · N MIN")
+ *   3. Asymmetric measure & line-height (notes tighter, posts looser)
+ */
+
+@import "tailwindcss";
+
+/* ─── Self-hosted iA Writer Quattro (OFL, via Fontsource) ─────────────────
+ * Tailwind v4 picks up @font-face rules in this file directly. We import the
+ * regular weight from Fontsource and let italic/700 follow as the font-display
+ * spec allows. */
+@import "@fontsource/ia-writer-quattro/400.css";
+@import "@fontsource/ia-writer-quattro/400-italic.css";
+@import "@fontsource/ia-writer-quattro/700.css";
+
+@theme {
+  /* One typeface for everything. Quattro is duospaced — the "i" and "m" share
+   * the same advance width, which gives sans-like proportions but a subtle
+   * mono rhythm that flatters running prose. */
+  --font-sans: "iA Writer QuattroV", "iA Writer Quattro", ui-monospace,
+    SFMono-Regular, Menlo, monospace;
+  --font-mono: "iA Writer QuattroV", "iA Writer Quattro", ui-monospace,
+    SFMono-Regular, Menlo, monospace;
+
+  /* Single accent color, intentionally subtle. Owner can change in one place. */
+  --color-accent: oklch(58% 0.18 250);
+
+  /* Soft off-blacks for dark mode (PRD §8: avoid pure black). */
+  --color-ink: oklch(16% 0.005 250);
+  --color-ink-soft: oklch(45% 0.01 250);
+  --color-paper: oklch(99% 0 0);
+  --color-paper-soft: oklch(95% 0 0);
+
+  --color-ink-dark: oklch(95% 0.005 250);
+  --color-ink-dark-soft: oklch(60% 0.01 250);
+  --color-paper-dark: oklch(16% 0.01 250);
+  --color-paper-dark-soft: oklch(22% 0.01 250);
+}
+
+/* ─── Page baseline ──────────────────────────────────────────────────────── */
+
+html {
+  font-family: var(--font-sans);
+  /* Quattro renders best with slightly relaxed letter-spacing at body sizes */
+  font-feature-settings: "kern", "liga", "calt";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+html.dark body {
+  background: var(--color-paper-dark);
+  color: var(--color-ink-dark);
+}
+
+/* The single accent: links and only links. No accent backgrounds, no accent
+ * borders, no accent buttons (until we have buttons). */
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in oklab, currentColor 25%, transparent);
+  transition: text-decoration-color 120ms ease;
+}
+a:hover {
+  text-decoration-color: var(--color-accent);
+}
+
+/* ─── Hand-rolled byte body styles (replacing @tailwindcss/typography) ──── */
+
+.byte-body {
+  /* Default = post measure & rhythm. Note variant overrides below. */
+  max-width: 70ch;
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.byte-body--note {
+  max-width: 60ch;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* Vertical rhythm: paragraphs and block elements share one base unit. */
+.byte-body > * + * {
+  margin-top: 1.1em;
+}
+.byte-body--note > * + * {
+  margin-top: 0.9em;
+}
+
+.byte-body h2 {
+  margin-top: 2.4em;
+  font-size: 1.25em;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+.byte-body h3 {
+  margin-top: 2em;
+  font-size: 1.05em;
+  font-weight: 700;
+}
+.byte-body h2 + p,
+.byte-body h3 + p {
+  margin-top: 0.5em;
+}
+
+.byte-body strong {
+  font-weight: 700;
+}
+.byte-body em {
+  font-style: italic;
+}
+
+.byte-body ul,
+.byte-body ol {
+  padding-left: 1.4em;
+}
+.byte-body ul {
+  list-style: disc;
+}
+.byte-body ol {
+  list-style: decimal;
+}
+.byte-body li + li {
+  margin-top: 0.4em;
+}
+
+.byte-body blockquote {
+  padding-left: 1em;
+  border-left: 2px solid color-mix(in oklab, currentColor 20%, transparent);
+  font-style: italic;
+  color: var(--color-ink-soft);
+}
+html.dark .byte-body blockquote {
+  color: var(--color-ink-dark-soft);
+}
+
+/* Inline code and code blocks. Quattro IS the code font, so we just shift the
+ * background slightly — no font swap needed. */
+.byte-body :not(pre) > code {
+  padding: 0.1em 0.35em;
+  background: var(--color-paper-soft);
+  border-radius: 3px;
+  font-size: 0.92em;
+}
+html.dark .byte-body :not(pre) > code {
+  background: var(--color-paper-dark-soft);
+}
+
+.byte-body pre {
+  margin-top: 1.4em;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+  background: var(--color-paper-soft);
+  border-radius: 4px;
+  font-size: 0.92em;
+  line-height: 1.55;
+}
+html.dark .byte-body pre {
+  background: var(--color-paper-dark-soft);
+}
+
+.byte-body hr {
+  margin: 2.5em 0;
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, currentColor 12%, transparent);
+}
+
+/* ─── Sticky month headers in the home feed ─────────────────────────────── */
+/* Translucent paper-color background so content scrolling underneath gets a
+ * subtle blur — keeps the "river" feeling without a hard divider. */
+.month-header {
+  background: color-mix(in oklab, var(--color-paper) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+html.dark .month-header {
+  background: color-mix(in oklab, var(--color-paper-dark) 88%, transparent);
+}
+
+/* ─── Theme toggle label visibility ─────────────────────────────────────── */
+/* Each label shows the OPPOSITE mode — i.e. the mode you'll switch TO if
+ * you click. In light mode you see "dark", in dark mode you see "light". */
+.theme-label-light {
+  display: none;
+}
+.theme-label-dark {
+  display: inline;
+}
+html.dark .theme-label-light {
+  display: inline;
+}
+html.dark .theme-label-dark {
+  display: none;
+}
+
+/* ─── Note permalink hover affordance ───────────────────────────────────── */
+/* Mastodon-style: the date IS the permalink. A faint # appears on hover. */
+.note-permalink {
+  text-decoration: none;
+}
+.note-permalink::after {
+  content: " #";
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.note-permalink:hover::after {
+  opacity: 0.45;
+}
