@@ -121,13 +121,25 @@ The site deploys automatically to Cloudflare Pages on every push to `main`:
 
 Preview deployments are generated automatically for every branch and pull request.
 
-### Updating content
+### Publishing a byte
 
-Because Notion is the source of truth and builds are triggered by Git pushes, publishing new content requires a build trigger even when no code has changed. Options:
+Notion is the source of truth, so "publishing" means flipping a row's `Status` to `Published` in the Bytes database. A scheduled GitHub Actions workflow (`.github/workflows/notion-publish-poll.yml`) polls Notion every 10 minutes and, if any Published byte has been edited in the last 15 minutes, POSTs a Cloudflare Pages **deploy hook** to trigger a rebuild. Expect the site to update within ~10–15 minutes of saving the change in Notion.
 
-- **Re-run the latest deploy** from the Cloudflare Pages dashboard (Deployments → `...` → Retry).
-- **Empty commit:** `git commit --allow-empty -m "rebuild: publish latest Notion content" && git push`.
-- **Deploy hook** (optional, not yet configured): Pages → Settings → Builds & deployments → Deploy hooks. Create a hook, then POST to its URL from a Notion automation, a cron, or a button to trigger a build without touching Git.
+The same mechanism covers edits to already-published bytes: any save that changes `last_edited_time` on a Published row will trigger a rebuild on the next tick.
+
+**To set this up (one-time):**
+
+1. **Create the deploy hook.** Cloudflare Pages dashboard → your `learningbytes` project → **Settings** → **Builds & deployments** → **Deploy hooks** → **Add deploy hook**. Name it something like `notion-poll`, target the `main` branch, save, and copy the URL. Treat this URL as a secret — anyone with it can trigger builds on your account. Store it in a password manager (e.g. 1Password). Never commit it.
+2. **Add GitHub Actions secrets.** Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**. Add three:
+   - `CLOUDFLARE_DEPLOY_HOOK_URL` — the URL from step 1
+   - `NOTION_API_KEY` — same value as in your local `.env`
+   - `NOTION_BYTES_DB_ID` — same value as in your local `.env`
+3. **Trigger a test run.** Repo → **Actions** tab → **Notion publish poll** → **Run workflow**. If the job is green and you recently edited a Published byte, you'll see a new Cloudflare Pages deployment start within seconds.
+
+**Manual override.** If the scheduled workflow is paused or broken and you need to force a build right now:
+
+- **Re-run the latest deploy** from the Cloudflare Pages dashboard (Deployments → `...` → Retry), or
+- **Dispatch the workflow manually** from the Actions tab (use the `workflow_dispatch` button on the poll workflow).
 
 ## Project layout
 

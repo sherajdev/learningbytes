@@ -1,0 +1,82 @@
+name: Notion publish poll
+
+# Triggers a Cloudflare Pages rebuild when a Published byte has been edited
+# in Notion recently. Stateless: every run asks Notion "any Published bytes
+# edited in the last 15 minutes?" and fires the deploy hook if so. The 15-min
+# window with a 10-min cron gives a 5-min overlap so transient misses don't
+# drop an edit.
+#
+# Secrets required (repo Settings -> Secrets and variables -> Actions):
+#   - NOTION_API_KEY           Notion internal integration secret
+#   - NOTION_BYTES_DB_ID       Bytes database ID (32-char, with or without dashes)
+#   - CLOUDFLARE_DEPLOY_HOOK_URL   Full Pages deploy hook URL (secret!)
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub Actions cron is best-effort and may drift or
+    # skip slots under load; the 15-min query window absorbs that.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}  # allow manual runs from the Actions tab
+
+concurrency:
+  # If a previous run is still going when the next tick fires, skip the new
+  # one rather than stacking. The next run will catch whatever it missed.
+  group: notion-publish-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query Notion for recently edited Published bytes
+        id: check
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_BYTES_DB_ID: ${{ secrets.NOTION_BYTES_DB_ID }}
+        run: |
+          set -euo pipefail
+
+          # 15-minute lookback window. Notion accepts ISO 8601.
+          SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)
+          echo "Looking for Published bytes edited since $SINCE"
+
+          # Status is a `select` property (not `status`) — matches the schema
+          # used by scripts/fetch-notion.ts and documented in README.md.
+          BODY=$(jq -n --arg since "$SINCE" '{
+            filter: {
+              and: [
+                { property: "Status", select: { equals: "Published" } },
+                { timestamp: "last_edited_time", last_edited_time: { on_or_after: $since } }
+              ]
+            },
+            page_size: 1
+          }')
+
+          RESP=$(curl -sS -X POST \
+            "https://api.notion.com/v1/databases/${NOTION_BYTES_DB_ID}/query" \
+            -H "Authorization: Bearer ${NOTION_API_KEY}" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+
+          # Fail loudly if Notion returned an error object instead of results.
+          if ! echo "$RESP" | jq -e '.results' >/dev/null; then
+            echo "Notion API error:"
+            echo "$RESP" | jq .
+            exit 1
+          fi
+
+          COUNT=$(echo "$RESP" | jq '.results | length')
+          echo "Matching bytes: $COUNT"
+          echo "changed=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Cloudflare Pages deploy hook
+        if: steps.check.outputs.changed != '0'
+        env:
+          HOOK_URL: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          # -f makes curl fail the step on non-2xx; the URL itself never
+          # appears in logs because it comes from a secret.
+          curl -fsS -X POST "$HOOK_URL" -o /dev/null
+          echo "Deploy hook triggered."
