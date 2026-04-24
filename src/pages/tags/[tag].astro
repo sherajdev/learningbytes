@@ -101,22 +101,16 @@ const { bytes } = Astro.props as Props;
         }
         return (
           <article id={byte.data.slug}>
-            {byte.data.coverImage && (() => {
-              const coverImage = byte.data.coverImage;
-              const basePath = coverImage.replace('-1200.webp', '');
-              return (
-                <a href={`/bytes/${byte.data.slug}`} class="block mb-4">
-                  <img 
-                    src={coverImage}
-                    srcset={`${basePath}-400.webp 400w, ${basePath}-800.webp 800w, ${basePath}-1200.webp 1200w`}
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 800px, 1200px"
-                    alt={`Cover for ${byte.data.title}`}
-                    class="w-full h-auto rounded-lg"
-                    loading="lazy"
-                  />
-                </a>
-              );
-            })()}
+            {byte.data.coverImage && (
+              <a href={`/bytes/${byte.data.slug}`} class="block mb-4">
+                <img 
+                  src={byte.data.coverImage}
+                  alt={`Cover for ${byte.data.title}`}
+                  class="w-full h-auto rounded-lg"
+                  loading="lazy"
+                />
+              </a>
+            )}
             <p class="text-xs uppercase tracking-[0.15em] opacity-50">
               Post ·{" "}
               <time datetime={byte.data.publishedDate.toISOString()}>

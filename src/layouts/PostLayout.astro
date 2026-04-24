@@ -73,21 +73,14 @@ const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${share
     data-pagefind-meta={`title:${title},format:Post,date:${publishedDate.toISOString().slice(0, 10)}`}
   >
     <header class="mb-10">
-      {coverImage && (() => {
-        // coverImage is like "/assets/notion/slug/cover-1200.webp"
-        // Extract base path to build srcset
-        const basePath = coverImage.replace('-1200.webp', '');
-        return (
-          <img 
-            src={coverImage}
-            srcset={`${basePath}-400.webp 400w, ${basePath}-800.webp 800w, ${basePath}-1200.webp 1200w`}
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 800px, 1200px"
-            alt={`Cover for ${title}`}
-            class="w-full h-auto rounded-lg mb-6"
-            loading="eager"
-          />
-        );
-      })()}
+      {coverImage && (
+        <img 
+          src={coverImage}
+          alt={`Cover for ${title}`}
+          class="w-full h-auto rounded-lg mb-6"
+          loading="eager"
+        />
+      )}
       <p class="text-xs uppercase tracking-[0.15em] opacity-50">
         Post · <time datetime={publishedDate.toISOString()}>{fmt(publishedDate)}</time>
         {readingTime && <> · {readingTime} min</>}
