@@ -33,7 +33,8 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
-    "pagefind": "^1.5.0"
+    "pagefind": "^1.5.0",
+    "sharp": "^0.34.5"
   },
   "overrides": {
     "vite": "^7"

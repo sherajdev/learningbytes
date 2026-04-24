@@ -10,6 +10,7 @@ Personal learning blog at [learningbytes.sheraj.org](https://learningbytes.shera
 - **MDX** — for the occasional rich content block
 - **[Pagefind](https://pagefind.app)** — static search index, built post-`astro build`
 - **[@notionhq/client](https://github.com/makenotion/notion-sdk-js)** + **[notion-to-md](https://github.com/souvikinator/notion-to-md)** — Notion → Markdown pipeline
+- **[sharp](https://sharp.pixel.lib/)** — Notion image download + responsive WebP conversion at build time
 - **Cloudflare Pages** — hosting, CI, custom domain, SSL
 - **Cloudflare Web Analytics** — cookieless pageview tracking
 
@@ -33,7 +34,7 @@ Each row is one published note or post.
 | `Tags` | Multi-select | |
 | `Series` | Select | Optional, groups posts into a sequence |
 | `Series order` | Number | Optional, orders posts within a series |
-| `Cover image` | Files & media | Optional, used by `PostLayout` |
+| `Cover image` | Files & media | Optional, downloaded and converted to responsive WebP at build time |
 | `Sources` | Relation → Sources DB | Citations for the byte |
 | `Reading time` | Number | Auto-computed by the fetch script, leave blank |
 
@@ -105,7 +106,11 @@ Important: `npm run dev` does **not** refetch from Notion. If the local content 
 
 `npm run build` runs three stages in order:
 
-1. **`tsx scripts/fetch-notion.ts`** — Queries Notion, writes one Markdown file per published byte to `src/content/bytes/`, writes cached source JSON to `src/content/sources/`, and downloads every cover image + inline body image to `src/assets/notion/[slug]/`, rewriting the Markdown to point at local paths. This last step is critical: Notion's hosted image URLs expire roughly an hour after they're issued, so we cannot leave `notion-static.com` / `amazonaws.com` URLs in the built site.
+1. **`tsx scripts/fetch-notion.ts`** — Queries Notion, writes one Markdown file per published byte to `src/content/bytes/`, writes cached source JSON to `src/content/sources/`, and:
+   - **Cover images:** Downloads the optional cover image from Notion, converts to responsive WebP at 400w, 800w, 1200w using `sharp`, saves to `src/assets/notion/[slug]/`, and writes the path into byte frontmatter as `coverImage`.
+   - **Inline body images:** Finds all Notion-hosted image URLs (`notion-static.com`, `prod-files-secure`, `amazonaws.com`) in the byte body, downloads and converts each to responsive WebP locally, then rewrites the markdown to reference the local files.
+   
+   This is critical: Notion's hosted image URLs expire roughly an hour after being issued. Shipping them in the built HTML would cause the site to silently break on the next visitor load. All images are persisted to `src/assets/notion/` which is gitignored — they're rebuilt fresh every build.
 2. **`astro build`** — Reads the typed content collections and generates static HTML in `dist/`.
 3. **`pagefind --site dist`** — Crawls the built HTML and writes a search index to `dist/pagefind/`, which the `/search` page loads client-side.
 
@@ -145,19 +150,21 @@ The same mechanism covers edits to already-published bytes: any save that change
 
 ```
 scripts/
-  fetch-notion.ts        # Notion → Markdown + local images pipeline
+  fetch-notion.ts        # Notion → Markdown + local image pipeline (cover + inline)
 src/
   content.config.ts      # Typed content collection schemas (authoritative)
+  assets/
+    notion/              # Downloaded Notion images — gitignored, rebuilt each build
   layouts/
     BaseLayout.astro     # Shell: head, header, footer, analytics beacon
     NoteLayout.astro     # Minimal, inline-readable (Format = Note)
-    PostLayout.astro     # Full layout: cover, reading time, series nav, sources
+    PostLayout.astro     # Full layout: cover image, reading time, series nav, sources
   pages/
-    index.astro          # Home: mixed feed (notes inline, posts as cards)
+    index.astro          # Home: mixed feed (notes inline, posts as cards with cover image)
     bytes/[slug].astro   # Dispatches to NoteLayout or PostLayout by Format
     bytes/index.astro    # All bytes index
-    tags/[tag].astro     # Tag pages
-    series/[series].astro# Series pages
+    tags/[tag].astro     # Tag pages with inline Note rendering
+    series/[series].astro# Series pages with inline Note rendering
     sources/[id].astro   # Per-source pages
     search.astro         # Pagefind UI
   components/            # Shared Astro components

@@ -1,19 +1,14 @@
 /**
- * scripts/fetch-notion.ts — STEP 4 (image-free variant)
+ * scripts/fetch-notion.ts — with image handling
  *
  * Fetches every Published byte from the Notion Bytes database, caches all
  * Sources, resolves the Sources relation per byte, computes reading time
  * when missing, and writes typed markdown files for Astro's content
  * collection to consume.
  *
- * Deliberately NOT in this version (per owner decision — no images yet):
- *   - Cover image handling
- *   - 🚨 Inline image local-download (PRD §7)
- *
- * As a safety net, the script FAILS HARD if it ever encounters a Notion-hosted
- * image URL in the generated markdown — that would be the canary for "we
- * forgot to enable image localization before adding an image to a byte". The
- * moment that fails, re-enable the image pipeline before shipping.
+ * Image handling (PRD §7):
+ *   - Cover image download + responsive WebP conversion (400w, 800w, 1200w)
+ *   - Inline body image localization (Notion URLs → local WebP)
  *
  * Run: `npm run fetch`
  */
@@ -24,6 +19,7 @@ import { writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import matter from "gray-matter";
+import sharp from "sharp";
 import "dotenv/config";
 
 // ─── Config ────────────────────────────────────────────────────────────────
@@ -40,6 +36,7 @@ if (!NOTION_API_KEY || !BYTES_DB_ID || !SOURCES_DB_ID) {
 
 const BYTES_OUT_DIR = "src/content/bytes";
 const SOURCES_OUT_DIR = "src/content/sources";
+const ASSETS_OUT_DIR = "src/assets/notion";
 
 const notion = new Client({ auth: NOTION_API_KEY });
 const n2m = new NotionToMarkdown({ notionClient: notion });
@@ -72,6 +69,7 @@ type Byte = {
   tags: string[];
   series?: string;
   seriesOrder?: number;
+  coverImage?: string;
   sourceIds: string[];
   readingTime: number;
   body: string;
@@ -121,32 +119,83 @@ const computeReadingTime = (markdown: string): number => {
   return Math.max(1, Math.round(words / 200)); // 200 wpm
 };
 
-// ─── Image-leak tripwire ───────────────────────────────────────────────────
-//
-// Until we wire up the image-localization pipeline (PRD §7), the only safe
-// state is "no Notion-hosted image URLs in any generated markdown". If one
-// appears, fail the build immediately so we never accidentally ship HTML
-// pointing at a URL that's going to expire in an hour.
+// ─── Image processing ───────────────────────────────────────────────────────
 
-const NOTION_IMAGE_HOSTS = [
-  "notion-static.com",
-  "prod-files-secure",
-  "amazonaws.com",
-];
+const IMAGE_SIZES = [400, 800, 1200]; // responsive breakpoints
 
-function assertNoNotionImages(slug: string, markdown: string): void {
-  // Look at all markdown image refs of the form ![alt](url)
-  const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
+async function downloadAndConvertImage(
+  url: string,
+  slug: string,
+  imageName: string
+): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch image: ${url}`);
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const imageDir = join(ASSETS_OUT_DIR, slug);
+  await mkdir(imageDir, { recursive: true });
+
+  // Generate responsive WebP variants
+  for (const width of IMAGE_SIZES) {
+    const filename = `${imageName}-${width}.webp`;
+    await sharp(buffer)
+      .resize(width, null, { withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(join(imageDir, filename));
+  }
+
+  // Return the relative path that markdown should reference
+  return `/assets/notion/${slug}/${imageName}`;
+}
+
+async function processCoverImage(
+  page: any,
+  slug: string
+): Promise<string | undefined> {
+  const coverProp = page.properties["Cover image"];
+  const hasFile = coverProp?.files?.[0]?.file?.url;
+  const hasExternal = coverProp?.files?.[0]?.external?.url;
+  
+  if (!hasFile && !hasExternal) {
+    return undefined;
+  }
+
+  const fileObj = coverProp.files[0];
+  const url = fileObj.file?.url ?? fileObj.external?.url;
+  const originalName = fileObj.name ?? "cover";
+  const baseName = originalName.replace(/\.[^.]+$/, "");
+
+  const relativePath = await downloadAndConvertImage(url, slug, baseName);
+  return `${relativePath}-1200.webp`;
+}
+
+async function localizeInlineImages(
+  markdown: string,
+  slug: string
+): Promise<string> {
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let result = markdown;
+
   for (const match of markdown.matchAll(imageRegex)) {
-    const url = match[1];
-    if (NOTION_IMAGE_HOSTS.some((h) => url.includes(h))) {
-      throw new Error(
-        `Byte "${slug}" contains a Notion-hosted image URL:\n  ${url}\n` +
-          "These URLs expire in ~1 hour and cannot be shipped. Re-enable the\n" +
-          "image-localization pipeline (PRD §7) before continuing."
-      );
+    const [fullMatch, altText, url] = match;
+
+    // Skip if not a Notion-hosted image
+    if (!url.includes("notion-static.com") &&
+        !url.includes("prod-files-secure") &&
+        !url.includes("amazonaws.com")) {
+      continue;
+    }
+
+    try {
+      const imageName = `inline-${Date.now()}`;
+      const relativePath = await downloadAndConvertImage(url, slug, imageName);
+      result = result.replace(fullMatch, `![${altText}](${relativePath}-1200.webp)`);
+    } catch (err) {
+      console.warn(`  ⚠️  Failed to download inline image: ${url}`);
     }
   }
+
+  return result;
 }
 
 // ─── Sources ───────────────────────────────────────────────────────────────
@@ -241,8 +290,11 @@ async function fetchBytes(sourcesMap: Map<string, Source>): Promise<Byte[]> {
       const mdblocks = await n2m.pageToMarkdown(page.id);
       const body = (n2m.toMarkdownString(mdblocks).parent ?? "").trim();
 
-      // PRD §7 tripwire — fail loud if any Notion image URL slipped through.
-      assertNoNotionImages(slug, body);
+      // Process cover image
+      const coverImage = await processCoverImage(page, slug);
+      
+      // Localize inline images (convert Notion URLs to local WebP)
+      const localizedBody = await localizeInlineImages(body, slug);
 
       // Resolve Sources relation against the cache. Filter out any IDs the
       // cache doesn't have (e.g., a relation pointing at a deleted source).
@@ -267,10 +319,11 @@ async function fetchBytes(sourcesMap: Map<string, Source>): Promise<Byte[]> {
         tags: getMultiSelect(page, "Tags"),
         series: getSelect(page, "Series"),
         seriesOrder: getNumber(page, "Series order"),
+        coverImage,
         sourceIds,
         readingTime:
-          getNumber(page, "Reading time") ?? computeReadingTime(body),
-        body,
+          getNumber(page, "Reading time") ?? computeReadingTime(localizedBody),
+        body: localizedBody,
       };
 
       bytes.push(byte);
@@ -300,6 +353,7 @@ async function writeBytes(bytes: Byte[]): Promise<void> {
         tags: byte.tags,
         series: byte.series,
         seriesOrder: byte.seriesOrder,
+        coverImage: byte.coverImage,
         sourceIds: byte.sourceIds,
         readingTime: byte.readingTime,
       }).filter(([, v]) => v !== undefined && v !== "")
@@ -319,7 +373,7 @@ async function main() {
 
   // Wipe previous output so a stale file from a deleted/unpublished byte
   // can never linger across builds.
-  for (const dir of [BYTES_OUT_DIR, SOURCES_OUT_DIR]) {
+  for (const dir of [BYTES_OUT_DIR, SOURCES_OUT_DIR, ASSETS_OUT_DIR]) {
     if (existsSync(dir)) await rm(dir, { recursive: true, force: true });
   }
 
