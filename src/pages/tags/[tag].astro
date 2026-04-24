@@ -103,7 +103,7 @@ const { bytes } = Astro.props as Props;
           <article id={byte.data.slug}>
             {byte.data.coverImage && (() => {
               const coverImage = byte.data.coverImage;
-              const basePath = coverImage.replace(/-1200\.webp$/, '');
+              const basePath = coverImage.replace('-1200.webp', '');
               return (
                 <a href={`/bytes/${byte.data.slug}`} class="block mb-4">
                   <img 
