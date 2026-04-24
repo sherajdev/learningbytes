@@ -76,7 +76,7 @@ const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${share
       {coverImage && (() => {
         // coverImage is like "/assets/notion/slug/cover-1200.webp"
         // Extract base path to build srcset
-        const basePath = coverImage.replace(/-1200\.webp$/, '');
+        const basePath = coverImage.replace('-1200.webp', '');
         return (
           <img 
             src={coverImage}
