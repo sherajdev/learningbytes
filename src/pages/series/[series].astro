@@ -60,7 +60,7 @@ const { bytes } = Astro.props as Props;
           const { Content } = await render(byte);
           const sources = (
             await Promise.all(byte.data.sourceIds.map((id) => getEntry("sources", id)))
-          ).filter((s): s is typeof s => s !== undefined);
+          ).filter((s): s is CollectionEntry<"sources"> => s !== undefined);
           return (
             <article id={byte.data.slug}>
               <p class="text-xs uppercase tracking-[0.15em] opacity-50">
@@ -73,7 +73,7 @@ const { bytes } = Astro.props as Props;
                 {byte.data.seriesOrder && <span class="opacity-30"> · part {byte.data.seriesOrder}</span>}
               </p>
               <div class="byte-body byte-body--note mt-4">
-                <Content />}
+                <Content />
               </div>
               {(sources.length > 0 || byte.data.tags.length > 0) && (
                 <div class="mt-4 space-y-2 text-sm opacity-70">
